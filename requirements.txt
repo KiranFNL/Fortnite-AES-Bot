@@ -1,3 +1,5 @@
-flask
-requests
-pillow
+services:
+  - name: fortnite-aes-bot
+    type: app
+    command: python3 bot.py
+    port: 8080
