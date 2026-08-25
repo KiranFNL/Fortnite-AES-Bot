@@ -1,4 +1,5 @@
 services:
   - name: fortnite-aes-bot
-    command: python bot.py
+    type: app
+    command: python3 bot.py
     port: 8080
