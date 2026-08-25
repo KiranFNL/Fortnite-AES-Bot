@@ -9,13 +9,39 @@ from datetime import datetime
 # EINSTELLUNGEN
 # ============================================================
 
+# NEUEN DISCORD WEBHOOK HIER EINTRAGEN
 WEBHOOK_URL = "https://discord.com/api/webhooks/1541600578340130897/f6xXG74cD3qIKlM28hv56FdxH0N__qaHlugIKC_oD5cd5XWzHKbANJhDEzJW9M0DJ1vl"
 
+# Fortnite AES API
 AES_URL = "https://fortnite-api.com/v2/aes"
 
-SEEN_FILE = "seen.json"
+# Discord Rollen-ID
+ROLE_ID = "1523617106414014504"
 
+# Wichtig:
+# /app ist auf deinem Hosting schreibgeschützt.
+# /tmp ist beschreibbar.
+SEEN_FILE = "/tmp/seen.json"
+
+# Alle 30 Sekunden prüfen
 CHECK_TIME = 30
+
+
+# ============================================================
+# TEST-BILD
+# ============================================================
+#
+# Hier kannst du eine öffentlich erreichbare Bild-URL
+# für die Testnachricht eintragen.
+#
+# Beispiel:
+#
+# TEST_IMAGE_URL = "https://example.com/test.png"
+#
+# Wenn du keine URL hast, einfach leer lassen.
+#
+
+TEST_IMAGE_URL = ""
 
 
 # ============================================================
@@ -25,16 +51,19 @@ CHECK_TIME = 30
 def get_aes():
 
     try:
+
         response = requests.get(
             AES_URL,
             timeout=15
         )
 
         if response.status_code != 200:
+
             print(
                 "[AES] HTTP Fehler:",
                 response.status_code
             )
+
             return []
 
         data = response.json()
@@ -46,12 +75,22 @@ def get_aes():
         )
 
         if not isinstance(dynamic_keys, list):
+
+            print(
+                "[AES] Keine gültigen Dynamic Keys"
+            )
+
             return []
 
         return dynamic_keys
 
     except Exception as e:
-        print("[AES] Fehler:", e)
+
+        print(
+            "[AES] Fehler:",
+            e
+        )
+
         return []
 
 
@@ -98,6 +137,7 @@ def get_uid(item):
 def load_seen():
 
     if not os.path.exists(SEEN_FILE):
+
         return set()
 
     try:
@@ -111,6 +151,7 @@ def load_seen():
             data = json.load(file)
 
         if isinstance(data, list):
+
             return set(data)
 
     except Exception as e:
@@ -129,9 +170,9 @@ def load_seen():
 
 def save_seen(seen):
 
-    try:
+    temp_file = SEEN_FILE + ".tmp"
 
-        temp_file = SEEN_FILE + ".tmp"
+    try:
 
         with open(
             temp_file,
@@ -150,6 +191,8 @@ def save_seen(seen):
             SEEN_FILE
         )
 
+        return True
+
     except Exception as e:
 
         print(
@@ -157,12 +200,33 @@ def save_seen(seen):
             e
         )
 
+        try:
+
+            if os.path.exists(temp_file):
+
+                os.remove(temp_file)
+
+        except Exception:
+
+            pass
+
+        return False
+
 
 # ============================================================
 # DISCORD SENDEN
 # ============================================================
 
 def send_discord(item):
+
+    if not WEBHOOK_URL:
+
+        print(
+            "[DISCORD] Kein Webhook eingetragen!"
+        )
+
+        return False
+
 
     # --------------------------------------------------------
     # DATEN
@@ -196,14 +260,19 @@ def send_discord(item):
         )
     )
 
+    image_url = str(
+        item.get(
+            "image",
+            ""
+        )
+    )
+
 
     # --------------------------------------------------------
-    # AKTUELLE UHRZEIT
+    # UHRZEIT
     # --------------------------------------------------------
 
-    now = datetime.now()
-
-    current_time = now.strftime(
+    current_time = datetime.now().strftime(
         "%H:%M Uhr"
     )
 
@@ -217,7 +286,6 @@ def send_discord(item):
         "title":
             "New Pak was decrypted!",
 
-
         "description":
 
             f"**{pak_filename}**\n"
@@ -229,10 +297,8 @@ def send_discord(item):
             f"**GUID**\n"
             f"{guid}",
 
-
         "color":
             5793266,
-
 
         "footer": {
 
@@ -244,22 +310,41 @@ def send_discord(item):
 
 
     # --------------------------------------------------------
-    # PAYLOAD
+    # BILD
     # --------------------------------------------------------
+
+    if image_url:
+
+        embed["image"] = {
+            "url": image_url
+        }
+
+
+    # --------------------------------------------------------
+    # DISCORD PAYLOAD
+    # --------------------------------------------------------
+    #
+    # Rolle wird hier gepingt:
+    #
+    # <@&1523617106414014504>
+    #
+    # allowed_mentions erlaubt genau diesen Rollen-Ping.
+    #
 
     payload = {
 
         "content":
-            "@aes-tracker",
-
+            f"<@&{ROLE_ID}>",
 
         "embeds": [
             embed
         ],
 
-
         "allowed_mentions": {
-            "parse": []
+
+            "roles": [
+                ROLE_ID
+            ]
         }
     }
 
@@ -280,6 +365,10 @@ def send_discord(item):
         )
 
 
+        # ----------------------------------------------------
+        # ERFOLG
+        # ----------------------------------------------------
+
         if response.status_code == 204:
 
             print(
@@ -289,7 +378,10 @@ def send_discord(item):
             return True
 
 
-        # Rate Limit
+        # ----------------------------------------------------
+        # RATE LIMIT
+        # ----------------------------------------------------
+
         if response.status_code == 429:
 
             try:
@@ -319,6 +411,10 @@ def send_discord(item):
 
             return False
 
+
+        # ----------------------------------------------------
+        # ANDERER FEHLER
+        # ----------------------------------------------------
 
         print(
             "[DISCORD] Fehler:",
@@ -364,6 +460,61 @@ print(
 
 
 # ============================================================
+# START-TEST
+# ============================================================
+#
+# Beim Start wird EINMAL eine Testnachricht gesendet.
+# Danach läuft der Bot normal weiter.
+#
+
+print(
+    "[TEST] Sende Testnachricht an Discord..."
+)
+
+
+test_item = {
+
+    "pakFilename":
+        "packchunk1013-WindowsClient.pak",
+
+    "key":
+        "TEST_KEY",
+
+    "keychain":
+        "TEST_KEYCHAIN",
+
+    "pakGuid":
+        "TEST_GUID",
+
+    "image":
+        TEST_IMAGE_URL
+}
+
+
+test_result = send_discord(
+    test_item
+)
+
+
+if test_result:
+
+    print(
+        "[TEST] Discord-Test erfolgreich!"
+    )
+
+else:
+
+    print(
+        "[TEST] Discord-Test fehlgeschlagen!"
+    )
+
+
+print(
+    "[TEST] Bot läuft jetzt normal weiter..."
+)
+
+
+# ============================================================
 # BEKANNTE AES LADEN
 # ============================================================
 
@@ -378,11 +529,15 @@ print(
 # AKTUELLEN BESTAND ÜBERNEHMEN
 # ============================================================
 #
-# Dadurch wird beim Neustart NICHT alles erneut gepostet.
+# Beim Start werden bereits vorhandene AES als bekannt
+# gespeichert.
 #
-# ============================================================
+# Dadurch werden beim Neustart nicht alle alten AES
+# erneut gepostet.
+#
 
 initial_aes = get_aes()
+
 
 if initial_aes:
 
@@ -398,7 +553,9 @@ if initial_aes:
 
             new_saved += 1
 
+
     save_seen(seen)
+
 
     print(
         f"[START] {new_saved} vorhandene "
@@ -411,6 +568,10 @@ else:
         "[START] Keine AES gefunden"
     )
 
+
+# ============================================================
+# LIVE
+# ============================================================
 
 print(
     "[LIVE] Warte auf neue AES..."
@@ -426,6 +587,11 @@ while True:
     try:
 
         aes = get_aes()
+
+
+        # ----------------------------------------------------
+        # KEINE AES-DATEN
+        # ----------------------------------------------------
 
         if not aes:
 
@@ -443,29 +609,37 @@ while True:
         found_new = False
 
 
+        # ----------------------------------------------------
+        # AES PRÜFEN
+        # ----------------------------------------------------
+
         for item in aes:
 
             uid = get_uid(item)
 
 
-            # ----------------------------------------------
-            # SCHON GESENDET?
-            # ----------------------------------------------
+            # ------------------------------------------------
+            # BEREITS BEKANNT
+            # ------------------------------------------------
 
             if uid in seen:
+
                 continue
 
 
-            # ----------------------------------------------
+            # ------------------------------------------------
             # NEUER PAK
-            # ----------------------------------------------
+            # ------------------------------------------------
 
             found_new = True
 
+
             print("")
+
             print(
                 "[AES] Neuer Pak gefunden!"
             )
+
 
             print(
                 "[AES] Pak:",
@@ -474,6 +648,7 @@ while True:
                     "UNKNOWN"
                 )
             )
+
 
             print(
                 "[AES] GUID:",
@@ -484,32 +659,29 @@ while True:
             )
 
 
-            # ----------------------------------------------
+            # ------------------------------------------------
             # SOFORT ALS BEKANNT MARKIEREN
-            # ----------------------------------------------
-            #
-            # Wichtig gegen Spam:
-            # Selbst wenn Discord später einen Fehler
-            # zurückgibt, wird derselbe Key nicht
-            # bei jedem 30-Sekunden-Check erneut gesendet.
-            #
-            # ----------------------------------------------
+            # ------------------------------------------------
 
             seen.add(uid)
 
             save_seen(seen)
 
 
-            # ----------------------------------------------
+            # ------------------------------------------------
             # DISCORD
-            # ----------------------------------------------
+            # ------------------------------------------------
 
             send_discord(item)
 
 
-            # Kleine Pause zwischen mehreren neuen Keys
+            # Kleine Pause zwischen Nachrichten
             time.sleep(2)
 
+
+        # ----------------------------------------------------
+        # KEINE NEUEN AES
+        # ----------------------------------------------------
 
         if not found_new:
 
@@ -518,18 +690,23 @@ while True:
             )
 
 
-        # ----------------------------------------------
-        # NÄCHSTER CHECK
-        # ----------------------------------------------
+        # ----------------------------------------------------
+        # 30 SEKUNDEN WARTEN
+        # ----------------------------------------------------
 
         time.sleep(
             CHECK_TIME
         )
 
 
+    # ========================================================
+    # MANUELLER STOP
+    # ========================================================
+
     except KeyboardInterrupt:
 
         print("")
+
         print(
             "[BOT] Manuell gestoppt"
         )
@@ -537,11 +714,19 @@ while True:
         break
 
 
+    # ========================================================
+    # FEHLER
+    # ========================================================
+
     except Exception as e:
 
         print(
             "[LOOP] Fehler:",
             e
+        )
+
+        print(
+            "[LOOP] Bot läuft in 30 Sekunden weiter..."
         )
 
         time.sleep(30)
