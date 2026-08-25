@@ -1,68 +1,140 @@
-import json
-import os
-import time
 import requests
+import json
+import time
+import os
 from datetime import datetime
 
 
-# =========================================================
-# KONFIGURATION
-# =========================================================
+# ============================================================
+# EINSTELLUNGEN
+# ============================================================
 
-API_URL = "https://fortnite-api.com/v2/aes"
+WEBHOOK_URL = "https://discord.com/api/webhooks/1541600578340130897/f6xXG74cD3qIKlM28hv56FdxH0N__qaHlugIKC_oD5cd5XWzHKbANJhDEzJW9M0DJ1vl"
 
-# DEINEN DISCORD WEBHOOK HIER EINTRAGEN
-WEBHOOK_URL = "https://discord.com/api/webhooks/1541537331272745061/blf3OerlkhCNMg0iSwwtk-EsVCkhvdJVcd-CTS9ToKPRZrsHqE4A2LmRT9GyLtqPiuwq"
+AES_URL = "https://fortnite-api.com/v2/aes"
 
-ROLE_ID = "1523617106414014504"
+SEEN_FILE = "seen.json"
 
-CHECK_INTERVAL = 30
-WEBHOOK_COOLDOWN = 3
-
-DATABASE_FILE = "seen_paks.json"
-IMAGE_FILE = "pak_preview.png"
-
-last_webhook = 0
+CHECK_TIME = 30
 
 
-# =========================================================
-# SEEN PAKS LADEN
-# =========================================================
+# ============================================================
+# AES ABRUFEN
+# ============================================================
+
+def get_aes():
+
+    try:
+        response = requests.get(
+            AES_URL,
+            timeout=15
+        )
+
+        if response.status_code != 200:
+            print(
+                "[AES] HTTP Fehler:",
+                response.status_code
+            )
+            return []
+
+        data = response.json()
+
+        dynamic_keys = (
+            data
+            .get("data", {})
+            .get("dynamicKeys", [])
+        )
+
+        if not isinstance(dynamic_keys, list):
+            return []
+
+        return dynamic_keys
+
+    except Exception as e:
+        print("[AES] Fehler:", e)
+        return []
+
+
+# ============================================================
+# EINDEUTIGE ID
+# ============================================================
+
+def get_uid(item):
+
+    pak = str(
+        item.get(
+            "pakFilename",
+            ""
+        )
+    )
+
+    guid = str(
+        item.get(
+            "pakGuid",
+            ""
+        )
+    )
+
+    key = str(
+        item.get(
+            "key",
+            ""
+        )
+    )
+
+    return (
+        pak
+        + "|"
+        + guid
+        + "|"
+        + key
+    )
+
+
+# ============================================================
+# SEEN LADEN
+# ============================================================
 
 def load_seen():
-    if not os.path.exists(DATABASE_FILE):
+
+    if not os.path.exists(SEEN_FILE):
         return set()
 
     try:
+
         with open(
-            DATABASE_FILE,
+            SEEN_FILE,
             "r",
             encoding="utf-8"
         ) as file:
 
             data = json.load(file)
 
-        return set(data)
+        if isinstance(data, list):
+            return set(data)
 
-    except Exception as error:
+    except Exception as e:
 
         print(
-            f"[-] Fehler beim Laden der Datenbank: {error}"
+            "[SEEN] Ladefehler:",
+            e
         )
 
-        return set()
+    return set()
 
 
-# =========================================================
-# SEEN PAKS SPEICHERN
-# =========================================================
+# ============================================================
+# SEEN SPEICHERN
+# ============================================================
 
 def save_seen(seen):
 
     try:
 
+        temp_file = SEEN_FILE + ".tmp"
+
         with open(
-            DATABASE_FILE,
+            temp_file,
             "w",
             encoding="utf-8"
         ) as file:
@@ -70,383 +142,159 @@ def save_seen(seen):
             json.dump(
                 list(seen),
                 file,
-                indent=2,
-                ensure_ascii=False
+                indent=2
             )
 
-    except Exception as error:
+        os.replace(
+            temp_file,
+            SEEN_FILE
+        )
+
+    except Exception as e:
 
         print(
-            f"[-] Fehler beim Speichern: {error}"
+            "[SEEN] Speicherfehler:",
+            e
         )
 
 
-# =========================================================
-# API
-# =========================================================
+# ============================================================
+# DISCORD SENDEN
+# ============================================================
 
-def get_paks():
+def send_discord(item):
 
-    print(
-        "[*] Fortnite API wird abgefragt..."
-    )
+    # --------------------------------------------------------
+    # DATEN
+    # --------------------------------------------------------
 
-    response = requests.get(
-        API_URL,
-        timeout=15
-    )
-
-    response.raise_for_status()
-
-    data = response.json()
-
-    paks = data.get(
-        "data",
-        {}
-    ).get(
-        "dynamicKeys",
-        []
-    )
-
-    print(
-        f"[+] {len(paks)} PAKs gefunden"
-    )
-
-    return paks
-
-
-# =========================================================
-# PAK ID
-# =========================================================
-
-def get_pak_id(pak):
-
-    filename = str(
-        pak.get(
+    pak_filename = str(
+        item.get(
             "pakFilename",
-            ""
+            "UNKNOWN"
+        )
+    )
+
+    key = str(
+        item.get(
+            "key",
+            "UNKNOWN"
         )
     )
 
     guid = str(
-        pak.get(
+        item.get(
             "pakGuid",
-            ""
+            "UNKNOWN"
         )
     )
 
-    key = str(
-        pak.get(
-            "key",
-            ""
+    keychain = str(
+        item.get(
+            "keychain",
+            key
         )
     )
 
-    return (
-        f"{filename}|"
-        f"{guid}|"
-        f"{key}"
+
+    # --------------------------------------------------------
+    # AKTUELLE UHRZEIT
+    # --------------------------------------------------------
+
+    now = datetime.now()
+
+    current_time = now.strftime(
+        "%H:%M Uhr"
     )
 
 
-# =========================================================
-# FILE INFORMATION
-# =========================================================
-
-def get_file_info(pak):
-
-    file_id = pak.get(
-        "fileId",
-        pak.get(
-            "pakGuid",
-            "N/A"
-        )
-    )
-
-    file_count = pak.get(
-        "fileCount",
-        "N/A"
-    )
-
-    file_size = pak.get(
-        "fileSize",
-        "N/A"
-    )
-
-    # Falls vorhanden: verschachtelte File-Daten
-    file_data = pak.get("file")
-
-    if isinstance(
-        file_data,
-        dict
-    ):
-
-        file_id = file_data.get(
-            "id",
-            file_id
-        )
-
-        file_count = file_data.get(
-            "count",
-            file_count
-        )
-
-        file_size = file_data.get(
-            "size",
-            file_size
-        )
-
-    return (
-        file_id,
-        file_count,
-        file_size
-    )
-
-
-# =========================================================
-# DISCORD SENDEN
-# =========================================================
-
-def send_pak(
-    pak,
-    test=False
-):
-
-    global last_webhook
-
-    filename = pak.get(
-        "pakFilename",
-        "Unknown.pak"
-    )
-
-    guid = pak.get(
-        "pakGuid",
-        "N/A"
-    )
-
-    key = pak.get(
-        "key",
-        "N/A"
-    )
-
-    key = str(
-        key
-    ).upper()
-
-    # -----------------------------------------------------
-    # FILE INFORMATION
-    # -----------------------------------------------------
-
-    file_id, file_count, file_size = (
-        get_file_info(pak)
-    )
-
-    # -----------------------------------------------------
-    # COOLDOWN
-    # -----------------------------------------------------
-
-    wait = (
-        WEBHOOK_COOLDOWN
-        -
-        (
-            time.time()
-            -
-            last_webhook
-        )
-    )
-
-    if wait > 0:
-
-        time.sleep(
-            wait
-        )
-
-    # -----------------------------------------------------
-    # UHRZEIT
-    # -----------------------------------------------------
-
-    now = datetime.now().strftime(
-        "%H:%M"
-    )
-
-    # -----------------------------------------------------
-    # TITEL
-    # -----------------------------------------------------
-
-    title = "New Pak was decrypted!"
-
-    if test:
-
-        title += " • TEST"
-
-    # -----------------------------------------------------
+    # --------------------------------------------------------
     # EMBED
-    # -----------------------------------------------------
+    # --------------------------------------------------------
 
     embed = {
 
-        "title": title,
+        "title":
+            "New Pak was decrypted!",
 
-        "description": (
-            f"**{filename}**\n"
-            f"`0x{key}`\n\n"
+
+        "description":
+
+            f"**{pak_filename}**\n"
+            f"{key}\n\n"
 
             f"**Keychain**\n"
-            f"`{key}`\n\n"
+            f"{keychain}\n\n"
 
             f"**GUID**\n"
-            f"`{guid}`\n\n"
+            f"{guid}",
 
-            f"**File Id**\n"
-            f"`{file_id}`\n\n"
 
-            f"**File Count**"
-            f"　　　　　　　　 "
-            f"**File Size**\n"
-            f"`{file_count}`"
-            f"　　　　　　　　 "
-            f"`{file_size}`"
-        ),
+        "color":
+            5793266,
 
-        "color": 0x3498DB,
 
         "footer": {
-            "text": (
+
+            "text":
                 f"made by @kiranfn • "
-                f"heute um {now} Uhr"
-            )
+                f"heute um {current_time}"
         }
     }
 
-    # -----------------------------------------------------
-    # BILD
-    # -----------------------------------------------------
 
-    image_path = os.path.join(
-        os.path.dirname(
-            os.path.abspath(__file__)
-        ),
-        IMAGE_FILE
-    )
-
-    has_image = os.path.isfile(
-        image_path
-    )
-
-    if has_image:
-
-        embed["image"] = {
-            "url": (
-                f"attachment://"
-                f"{IMAGE_FILE}"
-            )
-        }
-
-    else:
-
-        print(
-            f"[!] Bild nicht gefunden: "
-            f"{image_path}"
-        )
-
-    # -----------------------------------------------------
+    # --------------------------------------------------------
     # PAYLOAD
-    # -----------------------------------------------------
+    # --------------------------------------------------------
 
     payload = {
 
-        "content": (
-            f"<@&{ROLE_ID}>"
-        ),
+        "content":
+            "@aes-tracker",
+
 
         "embeds": [
             embed
         ],
 
+
         "allowed_mentions": {
-            "roles": [
-                ROLE_ID
-            ]
+            "parse": []
         }
     }
 
-    # -----------------------------------------------------
-    # SENDEN
-    # -----------------------------------------------------
+
+    # --------------------------------------------------------
+    # DISCORD POST
+    # --------------------------------------------------------
 
     try:
 
-        if has_image:
+        response = requests.post(
 
-            with open(
-                image_path,
-                "rb"
-            ) as image_file:
+            WEBHOOK_URL,
 
-                response = requests.post(
+            json=payload,
 
-                    WEBHOOK_URL,
+            timeout=15
+        )
 
-                    data={
-                        "payload_json":
-                            json.dumps(
-                                payload
-                            )
-                    },
-
-                    files={
-                        "file": (
-                            IMAGE_FILE,
-                            image_file,
-                            "image/png"
-                        )
-                    },
-
-                    timeout=15
-                )
-
-        else:
-
-            response = requests.post(
-
-                WEBHOOK_URL,
-
-                json=payload,
-
-                timeout=15
-            )
-
-        # -------------------------------------------------
-        # ERFOLG
-        # -------------------------------------------------
 
         if response.status_code == 204:
 
-            last_webhook = time.time()
-
-            if test:
-
-                print(
-                    "[+] TEST erfolgreich gesendet!"
-                )
-
-            else:
-
-                print(
-                    f"[+] GESENDET: {filename}"
-                )
+            print(
+                "[DISCORD] Nachricht gesendet"
+            )
 
             return True
 
-        # -------------------------------------------------
-        # RATE LIMIT
-        # -------------------------------------------------
 
+        # Rate Limit
         if response.status_code == 429:
 
             try:
 
-                retry = (
+                retry_after = (
                     response
                     .json()
                     .get(
@@ -457,26 +305,24 @@ def send_pak(
 
             except Exception:
 
-                retry = 5
+                retry_after = 5
+
 
             print(
-                f"[!] Discord Rate Limit: "
-                f"{retry}s"
+                f"[DISCORD] Rate Limit - "
+                f"{retry_after} Sekunden"
             )
 
             time.sleep(
-                float(retry)
+                float(retry_after)
             )
 
             return False
 
-        # -------------------------------------------------
-        # FEHLER
-        # -------------------------------------------------
 
         print(
-            f"[-] Discord Fehler: "
-            f"{response.status_code}"
+            "[DISCORD] Fehler:",
+            response.status_code
         )
 
         print(
@@ -485,268 +331,217 @@ def send_pak(
 
         return False
 
-    except requests.RequestException as error:
+
+    except Exception as e:
 
         print(
-            f"[-] Webhook Fehler: "
-            f"{error}"
+            "[WEBHOOK] Fehler:",
+            e
         )
 
         return False
 
 
-# =========================================================
-# START-TEST
-# =========================================================
+# ============================================================
+# BOT START
+# ============================================================
 
-def startup_test(paks):
+print(
+    "======================================"
+)
 
-    if not paks:
+print(
+    "       FORTNITE AES BOT"
+)
 
-        print(
-            "[-] Keine PAKs für den Start-Test."
-        )
+print(
+    "======================================"
+)
 
-        return
-
-    pak = paks[0]
-
-    print()
-    print(
-        "[*] START-TEST"
-    )
-
-    print(
-        f"[*] Sende: "
-        f"{pak.get('pakFilename', 'Unknown.pak')}"
-    )
-
-    send_pak(
-        pak,
-        test=True
-    )
-
-    print()
+print(
+    "[BOT] Gestartet"
+)
 
 
-# =========================================================
-# MAIN
-# =========================================================
+# ============================================================
+# BEKANNTE AES LADEN
+# ============================================================
 
-def main():
+seen = load_seen()
 
-    print()
-    print(
-        "======================================"
-    )
-    print(
-        "        FORTNITE AES TRACKER"
-    )
-    print(
-        "======================================"
-    )
-    print()
+print(
+    f"[SEEN] {len(seen)} bekannte AES geladen"
+)
 
-    # -----------------------------------------------------
-    # DATABASE
-    # -----------------------------------------------------
 
-    seen = load_seen()
+# ============================================================
+# AKTUELLEN BESTAND ÜBERNEHMEN
+# ============================================================
+#
+# Dadurch wird beim Neustart NICHT alles erneut gepostet.
+#
+# ============================================================
 
-    print(
-        f"[+] {len(seen)} gespeicherte PAKs geladen"
-    )
+initial_aes = get_aes()
+
+if initial_aes:
+
+    new_saved = 0
+
+    for item in initial_aes:
+
+        uid = get_uid(item)
+
+        if uid not in seen:
+
+            seen.add(uid)
+
+            new_saved += 1
+
+    save_seen(seen)
 
     print(
-        "[+] Spam-Schutz: AKTIV"
+        f"[START] {new_saved} vorhandene "
+        f"AES gespeichert"
     )
+
+else:
 
     print(
-        f"[+] API-Check: "
-        f"{CHECK_INTERVAL}s"
+        "[START] Keine AES gefunden"
     )
 
-    print()
 
-    # -----------------------------------------------------
-    # ERSTER API CHECK
-    # -----------------------------------------------------
+print(
+    "[LIVE] Warte auf neue AES..."
+)
+
+
+# ============================================================
+# LIVE LOOP
+# ============================================================
+
+while True:
 
     try:
 
-        paks = get_paks()
+        aes = get_aes()
 
-    except requests.RequestException as error:
+        if not aes:
 
-        print(
-            f"[-] API Fehler: {error}"
-        )
-
-        return
-
-    except Exception as error:
-
-        print(
-            f"[-] Fehler: {error}"
-        )
-
-        return
-
-    # -----------------------------------------------------
-    # AKTUELLE PAKS SPEICHERN
-    # -----------------------------------------------------
-
-    current_ids = set()
-
-    for pak in paks:
-
-        pak_id = get_pak_id(
-            pak
-        )
-
-        if pak_id:
-
-            current_ids.add(
-                pak_id
+            print(
+                "[CHECK] Keine AES-Daten"
             )
-
-    new_entries = (
-        current_ids - seen
-    )
-
-    if new_entries:
-
-        seen.update(
-            new_entries
-        )
-
-        save_seen(
-            seen
-        )
-
-    print()
-    print(
-        f"[*] Erster Check: "
-        f"{len(paks)} PAKs gespeichert"
-    )
-
-    print(
-        "[*] Alte PAKs werden "
-        "NICHT automatisch gesendet"
-    )
-
-    # -----------------------------------------------------
-    # SOFORT EIN TEST
-    # -----------------------------------------------------
-
-    startup_test(
-        paks
-    )
-
-    print(
-        "[+] Live-Tracker gestartet!"
-    )
-
-    print()
-
-    # -----------------------------------------------------
-    # LIVE LOOP
-    # -----------------------------------------------------
-
-    while True:
-
-        try:
 
             time.sleep(
-                CHECK_INTERVAL
+                CHECK_TIME
             )
 
-            paks = get_paks()
+            continue
 
-            new_count = 0
 
-            for pak in paks:
+        found_new = False
 
-                pak_id = get_pak_id(
-                    pak
-                )
 
-                if not pak_id:
+        for item in aes:
 
-                    continue
+            uid = get_uid(item)
 
-                # Bereits bekannt
-                if pak_id in seen:
 
-                    continue
+            # ----------------------------------------------
+            # SCHON GESENDET?
+            # ----------------------------------------------
 
-                filename = pak.get(
+            if uid in seen:
+                continue
+
+
+            # ----------------------------------------------
+            # NEUER PAK
+            # ----------------------------------------------
+
+            found_new = True
+
+            print("")
+            print(
+                "[AES] Neuer Pak gefunden!"
+            )
+
+            print(
+                "[AES] Pak:",
+                item.get(
                     "pakFilename",
-                    "Unknown.pak"
+                    "UNKNOWN"
                 )
+            )
 
-                print()
-                print(
-                    f"[+] NEUE PAK: "
-                    f"{filename}"
+            print(
+                "[AES] GUID:",
+                item.get(
+                    "pakGuid",
+                    "UNKNOWN"
                 )
-
-                # -------------------------------------------------
-                # DISCORD
-                # -------------------------------------------------
-
-                success = send_pak(
-                    pak,
-                    test=False
-                )
-
-                # -------------------------------------------------
-                # NUR BEI ERFOLG SPEICHERN
-                # -------------------------------------------------
-
-                if success:
-
-                    seen.add(
-                        pak_id
-                    )
-
-                    save_seen(
-                        seen
-                    )
-
-                    new_count += 1
-
-            print(
-                f"[*] {len(paks)} Einträge | "
-                f"{new_count} neue gesendet"
-            )
-
-        except requests.RequestException as error:
-
-            print(
-                f"[-] API Fehler: {error}"
-            )
-
-        except KeyboardInterrupt:
-
-            print()
-            print(
-                "[*] Tracker beendet."
-            )
-
-            break
-
-        except Exception as error:
-
-            print(
-                f"[-] Fehler: {error}"
             )
 
 
-# =========================================================
-# START
-# =========================================================
+            # ----------------------------------------------
+            # SOFORT ALS BEKANNT MARKIEREN
+            # ----------------------------------------------
+            #
+            # Wichtig gegen Spam:
+            # Selbst wenn Discord später einen Fehler
+            # zurückgibt, wird derselbe Key nicht
+            # bei jedem 30-Sekunden-Check erneut gesendet.
+            #
+            # ----------------------------------------------
 
-if __name__ == "__main__":
+            seen.add(uid)
 
-    main()
+            save_seen(seen)
+
+
+            # ----------------------------------------------
+            # DISCORD
+            # ----------------------------------------------
+
+            send_discord(item)
+
+
+            # Kleine Pause zwischen mehreren neuen Keys
+            time.sleep(2)
+
+
+        if not found_new:
+
+            print(
+                "[CHECK] Keine neuen AES"
+            )
+
+
+        # ----------------------------------------------
+        # NÄCHSTER CHECK
+        # ----------------------------------------------
+
+        time.sleep(
+            CHECK_TIME
+        )
+
+
+    except KeyboardInterrupt:
+
+        print("")
+        print(
+            "[BOT] Manuell gestoppt"
+        )
+
+        break
+
+
+    except Exception as e:
+
+        print(
+            "[LOOP] Fehler:",
+            e
+        )
+
+        time.sleep(30)
