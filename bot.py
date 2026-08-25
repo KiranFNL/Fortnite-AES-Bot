@@ -4,9 +4,27 @@ import time
 import os
 import io
 
+from flask import Flask
+from threading import Thread
+
 from datetime import datetime
 from PIL import Image, ImageDraw
 
+
+# ==========================
+# WEB SERVER FÜR UPTIMEROBOT
+# ==========================
+
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "Fortnite AES Bot is online!"
+
+def run_web():
+    app.run(host="0.0.0.0", port=8080)
+
+Thread(target=run_web).start()
 
 # =====================================================
 # EINSTELLUNGEN
