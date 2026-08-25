@@ -1,4 +1,4 @@
 services:
   - name: fortnite-aes-bot
     type: worker
-    startcommand: python bot.py
+    startCommand: python bot.py
