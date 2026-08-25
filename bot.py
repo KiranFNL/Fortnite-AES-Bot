@@ -484,3 +484,15 @@ while True:
 
 
         time.sleep(30)
+
+if __name__ == "__main__":
+    print("[LIVE] gestartet")
+
+    while True:
+        try:
+            check_aes()
+
+        except Exception as e:
+            print("[LOOP ERROR]", e)
+
+        time.sleep(30)
