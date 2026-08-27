@@ -1,5 +1,4 @@
 import requests
-import json
 import time
 
 from datetime import datetime
@@ -161,11 +160,12 @@ def send_discord(item, is_test=False):
         "UNKNOWN"
     )
 
+    # NUR echtes Keychain-Feld
+    # Kein AES-Key als Fallback
     keychain = item.get(
         "keychain",
-        key
+        "UNKNOWN"
     )
-
 
     # =================================================
     # TITEL
@@ -240,15 +240,10 @@ def send_discord(item, is_test=False):
     try:
 
         response = requests.post(
-
             WEBHOOK_URL,
-
             json=payload,
-
             timeout=20
-
         )
-
 
         if response.status_code not in (
             200,
@@ -266,13 +261,11 @@ def send_discord(item, is_test=False):
 
             return False
 
-
         print(
             "[DISCORD] gesendet"
         )
 
         return True
-
 
     except Exception as e:
 
@@ -305,15 +298,11 @@ print(
 # KONFIGURATION PRÜFEN
 # =====================================================
 
-if WEBHOOK_URL == "DEIN_NEUER_DISCORD_WEBHOOK":
+if WEBHOOK_URL == "DEIN_DISCORD_WEBHOOK":
 
     print()
     print(
         "[FEHLER] Bitte WEBHOOK_URL eintragen."
-    )
-
-    input(
-        "ENTER zum Beenden..."
     )
 
     raise SystemExit
@@ -372,17 +361,25 @@ else:
 seen = set()
 
 
-# Bereits vorhandene AES beim Start merken.
-# Diese werden NICHT erneut gesendet.
+# =====================================================
+# BEREITS VORHANDENE AES SPEICHERN
+# =====================================================
+#
+# Alles was beim Start bereits vorhanden ist,
+# wird NICHT als "NEW AES" gesendet.
+#
+# Dadurch kommt nur wirklich neu hinzugekommener
+# AES-Code als Discord-Nachricht.
+# =====================================================
 
 initial_aes = get_aes()
 
 
 for item in initial_aes:
 
-    seen.add(
-        get_uid(item)
-    )
+    uid = get_uid(item)
+
+    seen.add(uid)
 
 
 print(
@@ -402,6 +399,10 @@ print(
     f"[LIVE] Prüfung alle {CHECK_TIME} Sekunden"
 )
 
+print(
+    "[LIVE] Nur neue AES werden gesendet."
+)
+
 
 # =====================================================
 # LOOP
@@ -416,22 +417,21 @@ while True:
 
         for item in aes:
 
-            uid = get_uid(
-                item
-            )
+            uid = get_uid(item)
 
 
-            # Bereits bekannt?
+            # =================================================
+            # BEREITS BEKANNT?
+            # =================================================
+
             if uid in seen:
 
                 continue
 
 
-            # Sofort merken
-            seen.add(
-                uid
-            )
-
+            # =================================================
+            # NEUER AES
+            # =================================================
 
             pak_name = item.get(
                 "pakFilename",
@@ -454,11 +454,17 @@ while True:
             )
 
             print(
+                "[NEW AES] Sende Discord-Nachricht..."
+            )
+
+            print(
                 "================================"
             )
 
 
-            # Discord senden
+            # =================================================
+            # DISCORD SENDEN
+            # =================================================
 
             success = send_discord(
                 item,
@@ -466,10 +472,26 @@ while True:
             )
 
 
-            if not success:
+            # =================================================
+            # NUR BEI ERFOLGREICHEM SENDEN SPEICHERN
+            # =================================================
+
+            if success:
+
+                seen.add(uid)
+
+                print(
+                    "[NEW AES] Nachricht genau einmal gesendet."
+                )
+
+            else:
 
                 print(
                     "[WARNUNG] Discord-Nachricht fehlgeschlagen."
+                )
+
+                print(
+                    "[WARNUNG] Wird beim nächsten Check erneut versucht."
                 )
 
 
