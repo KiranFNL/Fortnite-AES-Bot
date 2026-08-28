@@ -59,7 +59,7 @@ def get_aes():
 
 
 # =====================================================
-# AES KEY MIT 0x FORMATIEREN
+# AES KEY FORMATIEREN
 # =====================================================
 
 def format_aes_key(key):
@@ -73,6 +73,7 @@ def format_aes_key(key):
         return "UNKNOWN"
 
     if not key.lower().startswith("0x"):
+
         key = "0x" + key
 
     return key
@@ -105,13 +106,7 @@ def get_uid(item):
         )
     ).strip().lower()
 
-    return (
-        pak
-        + "|"
-        + key
-        + "|"
-        + guid
-    )
+    return f"{pak}|{key}|{guid}"
 
 
 # =====================================================
@@ -123,9 +118,7 @@ def berlin_time():
     try:
 
         return datetime.now(
-            ZoneInfo(
-                "Europe/Berlin"
-            )
+            ZoneInfo("Europe/Berlin")
         ).strftime(
             "%H:%M Uhr"
         )
@@ -157,19 +150,20 @@ def create_keychain(item):
         )
     ).strip()
 
-    # Falls GUID oder KEY fehlt
     if not guid or not key:
 
         return "UNKNOWN"
 
-    # 0x beim Key entfernen,
-    # damit der Keychain sauber bleibt
+    # Falls API-Key bereits 0x enthält,
+    # 0x für den Keychain entfernen
+
     if key.lower().startswith("0x"):
 
         key = key[2:]
 
-    # KEYCHAIN FORMAT:
+    # Echter Keychain:
     # GUID:KEY
+
     return f"{guid}:{key}"
 
 
@@ -288,9 +282,7 @@ def send_discord(item, is_test=False):
 
     payload = {
 
-        "content":
-
-            f"<@&{ROLE_ID}>",
+        "content": f"<@&{ROLE_ID}>",
 
         "embeds": [
 
@@ -355,7 +347,7 @@ def send_discord(item, is_test=False):
 
         print(
 
-            "[DISCORD] gesendet"
+            "[DISCORD] Nachricht gesendet."
 
         )
 
@@ -399,7 +391,7 @@ print(
 
 
 # =====================================================
-# KONFIGURATION PRÜFEN
+# WEBHOOK PRÜFEN
 # =====================================================
 
 if WEBHOOK_URL == "DEIN_NEUER_DISCORD_WEBHOOK":
@@ -416,7 +408,13 @@ if WEBHOOK_URL == "DEIN_NEUER_DISCORD_WEBHOOK":
 
 
 # =====================================================
-# TEST-NACHRICHT
+# EINMALIGE TEST-NACHRICHT
+# =====================================================
+#
+# Dieser Block befindet sich außerhalb der while-Schleife.
+#
+# Deshalb wird die Test-Nachricht nur EINMAL gesendet:
+# direkt beim Start des Bots.
 # =====================================================
 
 test_item = {
@@ -440,7 +438,7 @@ print()
 
 print(
 
-    "[TEST] Sende Test-Nachricht..."
+    "[TEST] Sende einmalige Test-Nachricht..."
 
 )
 
@@ -458,7 +456,7 @@ if test_success:
 
     print(
 
-        "[TEST] Fertig."
+        "[TEST] Test-Nachricht erfolgreich gesendet."
 
     )
 
@@ -466,7 +464,7 @@ else:
 
     print(
 
-        "[TEST] Nachricht konnte nicht gesendet werden."
+        "[TEST] Test-Nachricht konnte nicht gesendet werden."
 
     )
 
@@ -482,11 +480,10 @@ seen = set()
 # BEREITS VORHANDENE AES SPEICHERN
 # =====================================================
 #
-# Alles was beim Start bereits vorhanden ist,
-# wird NICHT als neue AES Nachricht gesendet.
+# Alles, was beim Start bereits in der API vorhanden ist,
+# wird als bekannt gespeichert.
 #
-# Nur AES Keys, die später neu erscheinen,
-# werden an Discord gesendet.
+# Dadurch werden alte AES NICHT als "neue AES" gemeldet.
 # =====================================================
 
 initial_aes = get_aes()
@@ -503,46 +500,72 @@ for item in initial_aes:
     )
 
 
+print()
+
 print(
 
-    f"[AES] {len(seen)} vorhandene Keys gespeichert"
+    f"[AES] {len(seen)} vorhandene AES gespeichert."
 
 )
 
 
 # =====================================================
-# LIVE
+# LIVE START
 # =====================================================
 
+print()
+
 print(
 
-    "[LIVE] Bot gestartet"
+    "[LIVE] Bot gestartet."
 
 )
 
 print(
 
-    f"[LIVE] Prüfung alle {CHECK_TIME} Sekunden"
+    f"[LIVE] Prüfung alle {CHECK_TIME} Sekunden."
 
 )
 
 print(
 
-    "[LIVE] Nur neue AES werden gesendet."
+    "[LIVE] Nur neue AES werden gemeldet."
 
 )
+
+print(
+
+    "[LIVE] Jede AES wird maximal einmal gemeldet."
+
+)
+
+print(
+
+    "[LIVE] Test-Nachricht wird nicht erneut gesendet."
+
+)
+
+print()
 
 
 # =====================================================
-# LOOP
+# LIVE LOOP
 # =====================================================
 
 while True:
 
     try:
 
+        # ---------------------------------------------
+        # AES AKTUELL HOLEN
+        # ---------------------------------------------
+
         aes = get_aes()
 
+
+        # ---------------------------------------------
+        # ALLE AES DURCHGEHEN
+        # ---------------------------------------------
 
         for item in aes:
 
@@ -557,7 +580,7 @@ while True:
 
 
             # -----------------------------------------
-            # BEREITS BEKANNT?
+            # SCHON BEKANNT?
             # -----------------------------------------
 
             if uid in seen:
@@ -566,7 +589,24 @@ while True:
 
 
             # -----------------------------------------
-            # NEUER AES
+            # SOFORT ALS BEKANNT MARKIEREN
+            # -----------------------------------------
+            #
+            # WICHTIG:
+            # Die AES wird VOR dem Discord-Versand
+            # gespeichert.
+            #
+            # Dadurch kann dieselbe AES nicht zweimal
+            # gemeldet werden.
+            # -----------------------------------------
+
+            seen.add(
+                uid
+            )
+
+
+            # -----------------------------------------
+            # NEUE AES
             # -----------------------------------------
 
             pak_name = item.get(
@@ -596,7 +636,7 @@ while True:
 
             print(
 
-                "[NEW AES] Neue Entschlüsselung erkannt"
+                "[NEW AES] Neue AES erkannt."
 
             )
 
@@ -614,28 +654,6 @@ while True:
 
 
             # -----------------------------------------
-            # DEBUG:
-            # Zeigt die echten API-Daten an
-            # -----------------------------------------
-
-            print()
-
-            print(
-
-                "[DEBUG] AES ITEM:"
-
-            )
-
-            print(
-
-                item
-
-            )
-
-            print()
-
-
-            # -----------------------------------------
             # DISCORD SENDEN
             # -----------------------------------------
 
@@ -649,22 +667,28 @@ while True:
 
 
             # -----------------------------------------
-            # NUR BEI ERFOLGREICHEM SENDEN SPEICHERN
+            # ERGEBNIS
             # -----------------------------------------
 
             if success:
 
-                seen.add(
-                    uid
+                print()
+
+                print(
+
+                    "[NEW AES] Nachricht erfolgreich gesendet."
+
                 )
 
                 print(
 
-                    "[NEW AES] Nachricht genau einmal gesendet."
+                    "[NEW AES] Diese AES wird NICHT erneut gesendet."
 
                 )
 
             else:
+
+                print()
 
                 print(
 
@@ -674,7 +698,13 @@ while True:
 
                 print(
 
-                    "[WARNUNG] Wird beim nächsten Check erneut versucht."
+                    "[WARNUNG] AES bleibt trotzdem als verarbeitet markiert."
+
+                )
+
+                print(
+
+                    "[WARNUNG] Dadurch wird keine Doppel-Nachricht erzeugt."
 
                 )
 
@@ -682,6 +712,8 @@ while True:
         # ---------------------------------------------
         # NÄCHSTER CHECK
         # ---------------------------------------------
+
+        print()
 
         print(
 
@@ -719,6 +751,8 @@ while True:
     # =================================================
 
     except Exception as e:
+
+        print()
 
         print(
 
