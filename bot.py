@@ -16,8 +16,10 @@ WEBHOOK_URL = "https://discord.com/api/webhooks/1541600578340130897/f6xXG74cD3qI
 
 AES_URL = "https://fortnite-api.com/v2/aes"
 
+# Rolle für den Ping
 ROLE_ID = "1523617106414014504"
 
+# API alle 30 Sekunden prüfen
 CHECK_TIME = 30
 
 # Permanente Spam-Schutz-Datenbank
@@ -59,10 +61,9 @@ def normalize_key(key):
 # EINDEUTIGE AES-ID
 # =====================================================
 #
-# NUR DER AES-KEY wird verwendet.
+# NUR DER AES-KEY zählt.
 #
-# Gleicher Key = gleiche ID
-#
+# Gleicher AES-Key = gleiche ID
 # PAK und GUID sind für den Spam-Schutz egal.
 # =====================================================
 
@@ -120,9 +121,7 @@ def load_sent_aes():
         for value in data:
 
             if value:
-                seen.add(
-                    str(value)
-                )
+                seen.add(str(value))
 
         print(
             f"[SPAM] {len(seen)} AES aus Datenbank geladen."
@@ -184,12 +183,8 @@ def save_sent_aes(seen):
 
         try:
 
-            if os.path.exists(
-                temp_file
-            ):
-                os.remove(
-                    temp_file
-                )
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
 
         except Exception:
             pass
@@ -315,10 +310,7 @@ def create_keychain(item):
 # DISCORD SENDEN
 # =====================================================
 
-def send_discord(
-    item,
-    is_test=False
-):
+def send_discord(item):
 
     pak = str(
         item.get(
@@ -341,22 +333,7 @@ def send_discord(
         )
     ).strip()
 
-    keychain = create_keychain(
-        item
-    )
-
-
-    # =================================================
-    # TITEL
-    # =================================================
-
-    if is_test:
-
-        title = "AES Bot • Test-Nachricht"
-
-    else:
-
-        title = "New Pak was decrypted!"
+    keychain = create_keychain(item)
 
 
     # =================================================
@@ -365,7 +342,7 @@ def send_discord(
 
     embed = {
 
-        "title": title,
+        "title": "New Pak was decrypted!",
 
         "description": (
             f"**{pak}**\n"
@@ -391,14 +368,14 @@ def send_discord(
     # =================================================
     # PAYLOAD
     # =================================================
+    #
+    # JEDER Send pingt die Rolle.
+    # Auch die Test-Nachricht.
+    # =================================================
 
     payload = {
 
-        "content": (
-            ""
-            if is_test
-            else f"<@&{ROLE_ID}>"
-        ),
+        "content": f"<@&{ROLE_ID}>",
 
         "embeds": [
             embed
@@ -406,11 +383,9 @@ def send_discord(
 
         "allowed_mentions": {
 
-            "roles": (
-                []
-                if is_test
-                else [ROLE_ID]
-            )
+            "roles": [
+                ROLE_ID
+            ]
         }
     }
 
@@ -506,7 +481,7 @@ seen = load_sent_aes()
 # START-TEST
 # =====================================================
 #
-# Wird NICHT in der AES-Datenbank gespeichert.
+# Test-Nachricht pingt jetzt ebenfalls die Rolle.
 # =====================================================
 
 test_item = {
@@ -525,12 +500,11 @@ test_item = {
 print()
 
 print(
-    "[TEST] Sende Start-Testnachricht..."
+    "[TEST] Sende Start-Testnachricht MIT Rollen-Ping..."
 )
 
 test_success = send_discord(
-    test_item,
-    is_test=True
+    test_item
 )
 
 if test_success:
@@ -550,11 +524,8 @@ else:
 # START-AES
 # =====================================================
 #
-# Alles, was beim Start bereits vorhanden ist,
-# wird als bekannt markiert.
-#
-# Dadurch werden alte AES beim Neustart
-# nicht erneut gepostet.
+# Bereits vorhandene AES werden als bekannt markiert.
+# Sie werden beim Start NICHT gesendet.
 # =====================================================
 
 print()
@@ -575,27 +546,21 @@ for item in initial_aes:
     ):
         continue
 
-    uid = get_uid(
-        item
-    )
+    uid = get_uid(item)
 
     if not uid:
         continue
 
     if uid not in seen:
 
-        seen.add(
-            uid
-        )
+        seen.add(uid)
 
         initial_count += 1
 
 
 if initial_count > 0:
 
-    if save_sent_aes(
-        seen
-    ):
+    if save_sent_aes(seen):
 
         print(
             f"[START] {initial_count} vorhandene AES gespeichert."
@@ -640,6 +605,10 @@ print(
     "[LIVE] 2 verschiedene AES = 2 separate Nachrichten."
 )
 
+print(
+    f"[LIVE] Rollen-Ping aktiv: {ROLE_ID}"
+)
+
 print()
 
 
@@ -676,6 +645,10 @@ while True:
 
         processed_this_check = set()
 
+        duplicate_count = 0
+
+        new_count = 0
+
 
         # =============================================
         # ALLE API-EINTRÄGE
@@ -694,33 +667,27 @@ while True:
             # AES-ID
             # =========================================
 
-            uid = get_uid(
-                item
-            )
+            uid = get_uid(item)
 
             if not uid:
                 continue
 
 
             # =========================================
-            # GLEICHER AES MEHRMALS IN API
+            # DUPLIKAT IM SELBEN API-CHECK
             # =========================================
 
             if uid in processed_this_check:
 
-                print(
-                    "[SPAM-SCHUTZ] Doppelte AES im API-Check übersprungen."
-                )
+                duplicate_count += 1
 
                 continue
 
-            processed_this_check.add(
-                uid
-            )
+            processed_this_check.add(uid)
 
 
             # =========================================
-            # SCHON VERARBEITET
+            # BEREITS GESENDET
             # =========================================
 
             if uid in seen:
@@ -729,8 +696,10 @@ while True:
 
 
             # =========================================
-            # ECHTE API-DATEN
+            # NEUE AES
             # =========================================
+
+            new_count += 1
 
             pak_name = str(
                 item.get(
@@ -781,22 +750,18 @@ while True:
 
 
             # =========================================
-            # WICHTIGSTER SPAM-SCHUTZ
+            # AES VOR DEM SENDEN SPEICHERN
             #
-            # VOR DEM DISCORD-SENDEN speichern.
+            # Das verhindert erneuten Versand.
             # =========================================
 
             print(
-                "[SPAM-SCHUTZ] Markiere AES als verarbeitet..."
+                "[SPAM-SCHUTZ] Markiere AES..."
             )
 
-            seen.add(
-                uid
-            )
+            seen.add(uid)
 
-            saved = save_sent_aes(
-                seen
-            )
+            saved = save_sent_aes(seen)
 
 
             # =========================================
@@ -805,13 +770,7 @@ while True:
 
             if not saved:
 
-                # Nicht senden, wenn der permanente
-                # Spam-Schutz nicht gespeichert werden
-                # konnte.
-
-                seen.discard(
-                    uid
-                )
+                seen.discard(uid)
 
                 print(
                     "[SPAM-SCHUTZ] Datenbankfehler."
@@ -825,17 +784,14 @@ while True:
 
 
             # =========================================
-            # EINMALIG DISCORD SENDEN
+            # DISCORD SENDEN
             # =========================================
 
             print(
-                "[DISCORD] Sende AES..."
+                "[DISCORD] Sende neue AES MIT Rollen-Ping..."
             )
 
-            success = send_discord(
-                item,
-                is_test=False
-            )
+            success = send_discord(item)
 
 
             # =========================================
@@ -849,13 +805,8 @@ while True:
                 )
 
                 print(
-                    "[SPAM-SCHUTZ] Für immer gespeichert."
+                    "[SPAM-SCHUTZ] AES dauerhaft gespeichert."
                 )
-
-
-            # =========================================
-            # FEHLER
-            # =========================================
 
             else:
 
@@ -870,6 +821,31 @@ while True:
                 print(
                     "[SPAM-SCHUTZ] Kein erneuter Versand."
                 )
+
+
+        # =============================================
+        # ZUSAMMENFASSUNG
+        # =============================================
+
+        print()
+
+        if new_count > 0:
+
+            print(
+                f"[LIVE] {new_count} neue AES verarbeitet."
+            )
+
+        else:
+
+            print(
+                "[LIVE] Keine neuen AES."
+            )
+
+        if duplicate_count > 0:
+
+            print(
+                f"[SPAM-SCHUTZ] {duplicate_count} doppelte AES übersprungen."
+            )
 
 
         # =============================================
