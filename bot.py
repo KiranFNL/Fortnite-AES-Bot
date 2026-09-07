@@ -279,25 +279,21 @@ def berlin_datetime():
 # =====================================================
 # FOOTER ZEIT
 # =====================================================
+#
+# NUR "heute"!
+#
+# Der Footer wird beim Senden der Nachricht erstellt
+# und danach NICHT mehr verändert.
+#
+# Kein:
+# - gestern
+# - Datum nach mehreren Tagen
+# - Discord PATCH / Edit
+# =====================================================
 
 def footer_time():
 
     now = berlin_datetime()
-
-    # Da die AES API keinen eigenen Erstellungszeitpunkt
-    # für den Key liefert, wird die aktuelle Zeit verwendet.
-    #
-    # Heute:
-    # heute um 17:25 Uhr
-    #
-    # Gestern:
-    # gestern um 17:25 Uhr
-    #
-    # Ab 2 Tagen:
-    # tatsächliches Datum wie 9.9.26
-    #
-    # Die Berechnung basiert auf dem gespeicherten
-    # Footer-Datum.
 
     return (
         f"heute um "
@@ -486,6 +482,8 @@ if (
     not WEBHOOK_URL
     or
     WEBHOOK_URL == "DEIN_NEUER_DISCORD_WEBHOOK"
+    or
+    WEBHOOK_URL == "HIER_DEINEN_NEUEN_DISCORD_WEBHOOK_EINTRAGEN"
 ):
 
     print(
