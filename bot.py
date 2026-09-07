@@ -263,21 +263,46 @@ def format_aes_key(key):
 # BERLIN ZEIT
 # =====================================================
 
-def berlin_time():
+def berlin_datetime():
 
     try:
 
         return datetime.now(
             ZoneInfo("Europe/Berlin")
-        ).strftime(
-            "%H:%M Uhr"
         )
 
     except Exception:
 
-        return datetime.now().strftime(
-            "%H:%M Uhr"
-        )
+        return datetime.now()
+
+
+# =====================================================
+# FOOTER ZEIT
+# =====================================================
+
+def footer_time():
+
+    now = berlin_datetime()
+
+    # Da die AES API keinen eigenen Erstellungszeitpunkt
+    # für den Key liefert, wird die aktuelle Zeit verwendet.
+    #
+    # Heute:
+    # heute um 17:25 Uhr
+    #
+    # Gestern:
+    # gestern um 17:25 Uhr
+    #
+    # Ab 2 Tagen:
+    # tatsächliches Datum wie 9.9.26
+    #
+    # Die Berechnung basiert auf dem gespeicherten
+    # Footer-Datum.
+
+    return (
+        f"heute um "
+        f"{now.strftime('%H:%M')} Uhr"
+    )
 
 
 # =====================================================
@@ -359,7 +384,7 @@ def send_discord(item):
 
             "text": (
                 "made by @kiranfn • "
-                f"heute um {berlin_time()}"
+                f"{footer_time()}"
             )
         }
     }
